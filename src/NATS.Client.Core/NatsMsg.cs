@@ -43,16 +43,17 @@ public readonly record struct NatsMsg(
     public ValueTask ReplyAsync(ReadOnlySequence<byte> payload = default, in NatsPubOpts? opts = default, CancellationToken cancellationToken = default)
     {
         CheckReplyPreconditions();
-        return Connection.PublishAsync(ReplyTo!, payload, opts, cancellationToken);
+        return Connection.PublishAsync(ReplyTo, payload, opts, cancellationToken);
     }
 
     public ValueTask ReplyAsync(NatsMsg msg, in NatsPubOpts? opts = default, CancellationToken cancellationToken = default)
     {
         CheckReplyPreconditions();
-        return Connection.PublishAsync(msg with { Subject = ReplyTo! }, opts, cancellationToken);
+        return Connection.PublishAsync(msg with { Subject = ReplyTo }, opts, cancellationToken);
     }
 
     [MemberNotNull(nameof(Connection))]
+    [MemberNotNull(nameof(ReplyTo))]
     private void CheckReplyPreconditions()
     {
         if (Connection == default)
@@ -115,28 +116,29 @@ public readonly record struct NatsMsg<T>(
     public ValueTask ReplyAsync<TReply>(TReply data, in NatsPubOpts? opts = default, CancellationToken cancellationToken = default)
     {
         CheckReplyPreconditions();
-        return Connection.PublishAsync(ReplyTo!, data, opts, cancellationToken);
+        return Connection.PublishAsync(ReplyTo, data, opts, cancellationToken);
     }
 
     public ValueTask ReplyAsync<TReply>(NatsMsg<TReply> msg)
     {
         CheckReplyPreconditions();
-        return Connection.PublishAsync(msg with { Subject = ReplyTo! });
+        return Connection.PublishAsync(msg with { Subject = ReplyTo });
     }
 
     public ValueTask ReplyAsync(ReadOnlySequence<byte> payload = default, in NatsPubOpts? opts = default, CancellationToken cancellationToken = default)
     {
         CheckReplyPreconditions();
-        return Connection.PublishAsync(ReplyTo!, payload: payload, opts, cancellationToken);
+        return Connection.PublishAsync(ReplyTo, payload: payload, opts, cancellationToken);
     }
 
     public ValueTask ReplyAsync(NatsMsg msg)
     {
         CheckReplyPreconditions();
-        return Connection.PublishAsync(msg with { Subject = ReplyTo! });
+        return Connection.PublishAsync(msg with { Subject = ReplyTo });
     }
 
     [MemberNotNull(nameof(Connection))]
+    [MemberNotNull(nameof(ReplyTo))]
     private void CheckReplyPreconditions()
     {
         if (Connection == default)
