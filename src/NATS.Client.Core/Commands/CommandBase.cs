@@ -1,5 +1,6 @@
 #pragma warning disable VSTHRD200 // Use "Async" suffix for async methods
 
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks.Sources;
@@ -33,6 +34,8 @@ internal abstract class CommandBase<TSelf> : ICommand, IObjectPoolNode<TSelf>
             pool.Return(Unsafe.As<TSelf>(this));
         }
     }
+
+    public abstract Activity? GetActivity();
 
     public abstract void Write(ProtocolWriter writer);
 
@@ -81,6 +84,8 @@ internal abstract class AsyncCommandBase<TSelf> : ICommand, IAsyncCommand, IObje
         // however, set pool on this timing.
         _objectPool = pool;
     }
+
+    public abstract Activity? GetActivity();
 
     public abstract void Write(ProtocolWriter writer);
 
@@ -235,6 +240,8 @@ internal abstract class AsyncCommandBase<TSelf, TResponse> : ICommand, IAsyncCom
         // however, set pool on this timing.
         _objectPool = pool;
     }
+
+    public abstract Activity? GetActivity();
 
     public abstract void Write(ProtocolWriter writer);
 

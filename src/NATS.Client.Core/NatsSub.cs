@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.Runtime.ExceptionServices;
 using System.Threading.Channels;
 using NATS.Client.Core.Internal;
@@ -19,11 +20,15 @@ public sealed class NatsSub : NatsSubBase, INatsSub
     private readonly Channel<NatsMsg> _msgs;
 
     internal NatsSub(NatsConnection connection, ISubscriptionManager manager, string subject, NatsSubOpts? opts)
-        : base(connection, manager, subject, opts) =>
+        : base(connection, manager, subject, opts)
+    {
         _msgs = Channel.CreateBounded<NatsMsg>(
             GetChannelOptions(opts?.ChannelOptions));
 
-    public ChannelReader<NatsMsg> Msgs => _msgs.Reader;
+        Msgs = new ActivityChannelReader(_msgs.Reader);
+    }
+
+    public ChannelReader<NatsMsg> Msgs { get; }
 
     internal static BoundedChannelOptions GetChannelOptions(
         NatsSubChannelOpts? subChannelOpts)
@@ -50,13 +55,16 @@ public sealed class NatsSub : NatsSubBase, INatsSub
 
     protected override async ValueTask ReceiveInternalAsync(string subject, string? replyTo, ReadOnlySequence<byte>? headersBuffer, ReadOnlySequence<byte> payloadBuffer)
     {
+        Activity.Current = null;
+
         var natsMsg = NatsMsg.Build(
             subject,
             replyTo,
             headersBuffer,
             payloadBuffer,
             Connection,
-            Connection.HeaderParser);
+            Connection.HeaderParser,
+            Telemetry.NatsActivities.StartActivity(Telemetry.Constants.ReceiveActivityName, ActivityKind.Consumer));
 
         await _msgs.Writer.WriteAsync(natsMsg).ConfigureAwait(false);
 
@@ -81,15 +89,19 @@ public sealed class NatsSub<T> : NatsSubBase, INatsSub<T>
         _msgs = Channel.CreateBounded<NatsMsg<T?>>(
             NatsSub.GetChannelOptions(opts?.ChannelOptions));
 
+        Msgs = new ActivityChannelReader<T?>(_msgs.Reader);
+
         Serializer = serializer;
     }
 
-    public ChannelReader<NatsMsg<T?>> Msgs => _msgs.Reader;
+    public ChannelReader<NatsMsg<T?>> Msgs { get; }
 
     private INatsSerializer Serializer { get; }
 
     protected override async ValueTask ReceiveInternalAsync(string subject, string? replyTo, ReadOnlySequence<byte>? headersBuffer, ReadOnlySequence<byte> payloadBuffer)
     {
+        Activity.Current = null;
+
         var natsMsg = NatsMsg<T?>.Build(
             subject,
             replyTo,
@@ -97,7 +109,8 @@ public sealed class NatsSub<T> : NatsSubBase, INatsSub<T>
             payloadBuffer,
             Connection,
             Connection.HeaderParser,
-            Serializer);
+            Serializer,
+            Telemetry.NatsActivities.StartActivity(Telemetry.Constants.ReceiveActivityName, ActivityKind.Consumer));
 
         await _msgs.Writer.WriteAsync(natsMsg).ConfigureAwait(false);
 

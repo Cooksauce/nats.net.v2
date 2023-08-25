@@ -742,6 +742,12 @@ public partial class NatsConnection : IAsyncDisposable, INatsConnection
         await coreAsync(this, item1, item2, item3, item4, item5, item6).ConfigureAwait(false);
     }
 
+    private async ValueTask WithConnectAsync<T1, T2, T3, T4, T5, T6, T7>(T1 item1, T2 item2, T3 item3, T4 item4, T5 item5, T6 item6, T7 item7, Func<NatsConnection, T1, T2, T3, T4, T5, T6, T7, ValueTask> coreAsync)
+    {
+        await ConnectAsync().ConfigureAwait(false);
+        await coreAsync(this, item1, item2, item3, item4, item5, item6, item7).ConfigureAwait(false);
+    }
+
     private async ValueTask<T> WithConnectAsync<T>(Func<NatsConnection, ValueTask<T>> coreAsync)
     {
         await ConnectAsync().ConfigureAwait(false);
@@ -808,6 +814,7 @@ internal sealed class WriterState
         }
 
         PriorityCommands = new List<ICommand>();
+        InflightCommands = new List<Activity>();
         PendingPromises = new List<IPromise>();
     }
 
@@ -820,4 +827,6 @@ internal sealed class WriterState
     public List<ICommand> PriorityCommands { get; }
 
     public List<IPromise> PendingPromises { get; }
+
+    public List<Activity> InflightCommands { get; }
 }

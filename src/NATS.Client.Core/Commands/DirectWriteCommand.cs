@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using NATS.Client.Core.Internal;
 
@@ -37,6 +38,8 @@ internal sealed class DirectWriteCommand : ICommand
     {
         _protocol = protocol;
     }
+
+    public Activity? GetActivity() => null; // todo
 
     bool ICommand.IsCanceled => false;
 
