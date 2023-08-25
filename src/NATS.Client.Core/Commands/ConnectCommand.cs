@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using NATS.Client.Core.Internal;
 
 namespace NATS.Client.Core.Commands;
@@ -22,6 +23,8 @@ internal sealed class AsyncConnectCommand : AsyncCommandBase<AsyncConnectCommand
 
         return result;
     }
+
+    public override Activity? GetActivity() => null; // todo
 
     public override void Write(ProtocolWriter writer)
     {

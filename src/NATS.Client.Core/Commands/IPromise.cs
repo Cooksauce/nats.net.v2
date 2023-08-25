@@ -1,7 +1,11 @@
+using System.Diagnostics;
+
 namespace NATS.Client.Core.Commands;
 
 internal interface IPromise
 {
+    Activity? GetActivity();
+
     void SetResult();
 
     void SetCanceled();

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 
 namespace NATS.Client.Core.Tests;
@@ -50,6 +51,8 @@ internal class SleepWriteCommand : ICommand
         _protocol = Encoding.UTF8.GetBytes(protocol + "\r\n");
         _sleepTime = sleepTime;
     }
+
+    public Activity? GetActivity() => null;
 
     public bool IsCanceled => false;
 

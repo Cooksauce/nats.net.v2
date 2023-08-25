@@ -1,0 +1,45 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+exporters:
+  # todo: consider switch to grafana
+  jaeger:
+    endpoint: jaeger:14250
+    tls:
+      insecure: true
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 65
+    spike_limit_percentage: 20
+  batch:
+  resourcedetection:
+    detectors: []
+    timeout: 10s
+
+extensions:
+  health_check:
+    endpoint: "0.0.0.0:2000"
+    path: "/healthz/live"
+    check_collector_pipeline:
+      enabled: true
+      interval: "5m"
+      exporter_failure_threshold: 5
+
+service:
+#  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [jaeger]
+#    metrics:
+#      receivers: [otlp]
+#      processors: [memory_limiter, batch]
+#      exporters: [jaeger]
+#    logs:
+#      receivers: [otlp]
+#      processors: [memory_limiter, batch]
+#      exporters: [jaeger]

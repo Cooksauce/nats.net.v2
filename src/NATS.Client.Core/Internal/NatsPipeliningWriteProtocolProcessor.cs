@@ -48,6 +48,8 @@ internal sealed class NatsPipeliningWriteProtocolProcessor : IAsyncDisposable
         var logger = _opts.LoggerFactory.CreateLogger<NatsPipeliningWriteProtocolProcessor>();
         var writerBufferSize = _opts.WriterBufferSize;
         var promiseList = new List<IPromise>(100);
+        var inflightCmds = new List<Activity>(100);
+
         var isEnabledTraceLogging = logger.IsEnabled(LogLevel.Trace);
 
         try
@@ -63,6 +65,9 @@ internal sealed class NatsPipeliningWriteProtocolProcessor : IAsyncDisposable
                     foreach (var command in firstCommands)
                     {
                         command.Write(tempWriter);
+
+                        if (command.GetActivity() is { } activity)
+                            inflightCmds.Add(activity);
 
                         if (command is IPromise p)
                         {
@@ -94,13 +99,30 @@ internal sealed class NatsPipeliningWriteProtocolProcessor : IAsyncDisposable
                     catch (Exception ex)
                     {
                         _socketConnection.SignalDisconnected(ex);
+
+                        foreach (var inflightCmd in inflightCmds)
+                        {
+                            var activity = inflightCmd;
+                            Telemetry.SetException(ref activity, ex);
+                        }
+
                         foreach (var item in promiseList)
                         {
+                            // var activity = item.GetActivity();
+                            // Telemetry.SetException(ref activity, ex);
                             item.SetException(ex); // signal failed
                         }
 
                         return; // when socket closed, finish writeloop.
                     }
+
+                    foreach (var inflightCmd in inflightCmds)
+                    {
+                        var activity = inflightCmd;
+                        Telemetry.SetComplete(ref activity);
+                    }
+
+                    inflightCmds.Clear();
 
                     foreach (var item in promiseList)
                     {
@@ -112,7 +134,9 @@ internal sealed class NatsPipeliningWriteProtocolProcessor : IAsyncDisposable
             }
 
             // restore promise(command is exist in bufferWriter) when enter from reconnecting.
+            inflightCmds.AddRange(_state.InflightCommands);
             promiseList.AddRange(_state.PendingPromises);
+            _state.InflightCommands.Clear();
             _state.PendingPromises.Clear();
 
             // main writer loop
@@ -136,6 +160,10 @@ internal sealed class NatsPipeliningWriteProtocolProcessor : IAsyncDisposable
                         else
                         {
                             command.Write(protocolWriter);
+
+                            if (command.GetActivity() is { } activity)
+                                inflightCmds.Add(activity);
+
                             count++;
                         }
 
@@ -174,7 +202,16 @@ internal sealed class NatsPipeliningWriteProtocolProcessor : IAsyncDisposable
 
                         Interlocked.Add(ref _counter.SentMessages, count);
 
+                        foreach (var inflightCmd in inflightCmds)
+                        {
+                            var activity = inflightCmd;
+                            Telemetry.SetComplete(ref activity);
+                        }
+
+                        inflightCmds.Clear();
+
                         _bufferWriter.Reset();
+
                         foreach (var item in promiseList)
                         {
                             item.SetResult();
@@ -188,6 +225,7 @@ internal sealed class NatsPipeliningWriteProtocolProcessor : IAsyncDisposable
 
                         // when error, command is dequeued and written buffer is still exists in state.BufferWriter
                         // store current pending promises to state.
+                        _state.InflightCommands.AddRange(inflightCmds);
                         _state.PendingPromises.AddRange(promiseList);
                         _socketConnection.SignalDisconnected(ex);
                         return; // when socket closed, finish writeloop.

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using NATS.Client.Core.Internal;
 
@@ -5,6 +6,8 @@ namespace NATS.Client.Core.Commands;
 
 internal interface ICommand
 {
+    Activity? GetActivity();
+
     bool IsCanceled { get; }
 
     void SetCancellationTimer(CancellationTimer timer);

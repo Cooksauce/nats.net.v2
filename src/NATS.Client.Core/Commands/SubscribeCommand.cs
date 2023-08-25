@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using NATS.Client.Core.Internal;
 
 namespace NATS.Client.Core.Commands;
@@ -28,6 +29,8 @@ internal sealed class AsyncSubscribeCommand : AsyncCommandBase<AsyncSubscribeCom
 
         return result;
     }
+
+    public override Activity? GetActivity() => null; // todo: consider implementing this
 
     public override void Write(ProtocolWriter writer)
     {
@@ -62,6 +65,9 @@ internal sealed class AsyncSubscribeBatchCommand : AsyncCommandBase<AsyncSubscri
 
         return result;
     }
+
+    // todo: consider implementing this
+    public override Activity? GetActivity() => throw new NotImplementedException();
 
     public override void Write(ProtocolWriter writer)
     {

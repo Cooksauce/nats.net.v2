@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
 namespace NATS.Client.Core;
@@ -9,7 +10,8 @@ public readonly record struct NatsMsg(
     int Size,
     NatsHeaders? Headers,
     ReadOnlyMemory<byte> Data,
-    INatsConnection? Connection)
+    INatsConnection? Connection,
+    Activity? Activity = null)
 {
     internal static NatsMsg Build(
         string subject,
@@ -17,7 +19,8 @@ public readonly record struct NatsMsg(
         in ReadOnlySequence<byte>? headersBuffer,
         in ReadOnlySequence<byte> payloadBuffer,
         INatsConnection? connection,
-        NatsHeaderParser headerParser)
+        NatsHeaderParser headerParser,
+        Activity? activity = null)
     {
         NatsHeaders? headers = null;
 
@@ -37,18 +40,21 @@ public readonly record struct NatsMsg(
                    + (headersBuffer?.Length ?? 0)
                    + payloadBuffer.Length;
 
-        return new NatsMsg(subject, replyTo, (int)size, headers, payloadBuffer.ToArray(), connection);
+        Telemetry.FillReceiveActivity(ref activity, headers, subject, replyTo);
+        return new NatsMsg(subject, replyTo, (int)size, headers, payloadBuffer.ToArray(), connection, activity);
     }
 
     public ValueTask ReplyAsync(ReadOnlySequence<byte> payload = default, in NatsPubOpts? opts = default, CancellationToken cancellationToken = default)
     {
         CheckReplyPreconditions();
+        Activity.Current ??= Activity;
         return Connection.PublishAsync(ReplyTo, payload, opts, cancellationToken);
     }
 
     public ValueTask ReplyAsync(NatsMsg msg, in NatsPubOpts? opts = default, CancellationToken cancellationToken = default)
     {
         CheckReplyPreconditions();
+        Activity.Current ??= Activity;
         return Connection.PublishAsync(msg with { Subject = ReplyTo }, opts, cancellationToken);
     }
 
@@ -74,7 +80,8 @@ public readonly record struct NatsMsg<T>(
     int Size,
     NatsHeaders? Headers,
     T? Data,
-    INatsConnection? Connection)
+    INatsConnection? Connection,
+    Activity? Activity = null)
 {
     internal static NatsMsg<T> Build(
         string subject,
@@ -83,7 +90,8 @@ public readonly record struct NatsMsg<T>(
         in ReadOnlySequence<byte> payloadBuffer,
         INatsConnection? connection,
         NatsHeaderParser headerParser,
-        INatsSerializer serializer)
+        INatsSerializer serializer,
+        Activity? activity = null)
     {
         // Consider an empty payload as null or default value for value types. This way we are able to
         // receive sentinels as nulls or default values. This might cause an issue with where we are not
@@ -110,30 +118,35 @@ public readonly record struct NatsMsg<T>(
             + (headersBuffer?.Length ?? 0)
             + payloadBuffer.Length;
 
-        return new NatsMsg<T>(subject, replyTo, (int)size, headers, data, connection);
+        Telemetry.FillReceiveActivity(ref activity, headers, subject, replyTo);
+        return new NatsMsg<T>(subject, replyTo, (int)size, headers, data, connection, activity);
     }
 
     public ValueTask ReplyAsync<TReply>(TReply data, in NatsPubOpts? opts = default, CancellationToken cancellationToken = default)
     {
         CheckReplyPreconditions();
+        Activity.Current ??= Activity;
         return Connection.PublishAsync(ReplyTo, data, opts, cancellationToken);
     }
 
     public ValueTask ReplyAsync<TReply>(NatsMsg<TReply> msg)
     {
         CheckReplyPreconditions();
+        Activity.Current ??= Activity;
         return Connection.PublishAsync(msg with { Subject = ReplyTo });
     }
 
     public ValueTask ReplyAsync(ReadOnlySequence<byte> payload = default, in NatsPubOpts? opts = default, CancellationToken cancellationToken = default)
     {
         CheckReplyPreconditions();
+        Activity.Current ??= Activity;
         return Connection.PublishAsync(ReplyTo, payload: payload, opts, cancellationToken);
     }
 
     public ValueTask ReplyAsync(NatsMsg msg)
     {
         CheckReplyPreconditions();
+        Activity.Current ??= Activity;
         return Connection.PublishAsync(msg with { Subject = ReplyTo });
     }
 
