@@ -9,14 +9,10 @@ namespace NATS.Client.Core;
 
 // === Spec ====
 // - https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/semantic_conventions/messaging.md
-
-
-
-
-
 public static class Telemetry
 {
     public const string ActivitySourceName = "NATS.Client";
+
     public static ActivitySource NatsActivities { get; } = new(ActivitySourceName);
 
     internal class Constants
@@ -60,15 +56,7 @@ public static class Telemetry
 
     private static readonly object _boxedTrue = true;
 
-    internal static void SetComplete(ref Activity? activity)
-    {
-        if (activity is null)
-            return;
-
-        // activity.Stop();
-        // activity.SetStatus(ActivityStatusCode.Ok);
-        activity.Dispose();
-    }
+    internal static void SetComplete(ref Activity? activity) => activity?.Dispose();
 
     internal static void SetException(ref Activity? activity, Exception exception)
     {
@@ -171,81 +159,6 @@ public static class Telemetry
 
             state.traceFlags.CopyTo(span[i..]);
         });
-    }
-}
-
-public class ActivityChannelReader : ChannelReader<NatsMsg>
-{
-    private readonly ChannelReader<NatsMsg> _inner;
-
-    // [ThreadStatic]
-    // private static Activity? _currentThreadActivity;
-
-    public ActivityChannelReader(ChannelReader<NatsMsg> inner) => _inner = inner;
-
-    public override ValueTask<bool> WaitToReadAsync(CancellationToken cancellationToken = default) => _inner.WaitToReadAsync(cancellationToken);
-
-    public override bool TryRead(out NatsMsg item)
-    {
-        // var current = _currentThreadActivity;   //Activity.Current;
-        //Activity.Current = null;
-        // _currentThreadActivity = null;
-        // current?.Dispose();
-
-        if (!_inner.TryRead(out item))
-            return false;
-
-        // var activity = Telemetry.NatsActivities.StartActivity(Telemetry.Constants.ReceiveActivityName, ActivityKind.Consumer);
-
-        // Telemetry.FillReceiveActivity(ref activity, item.Headers, item.Subject, item.ReplyTo);
-
-        // Set the current. We expect to consuming thread here to call TryRead again when it's done with the message.
-        //Activity.Current = activity;
-        // _currentThreadActivity = activity;
-
-        return true;
-    }
-}
-
-public class ActivityChannelReader<T> : ChannelReader<NatsMsg<T>>
-{
-    private readonly ChannelReader<NatsMsg<T>> _inner;
-
-    public ActivityChannelReader(ChannelReader<NatsMsg<T>> inner) => _inner = inner;
-
-    public override ValueTask<bool> WaitToReadAsync(CancellationToken cancellationToken = default) => _inner.WaitToReadAsync(cancellationToken);
-
-    public override bool TryRead(out NatsMsg<T> item)
-    {
-        Activity.Current?.Dispose();
-        Activity.Current = null;
-
-        if (!_inner.TryRead(out item))
-            return false;
-
-        var activity = Telemetry.NatsActivities.StartActivity(Telemetry.Constants.ReceiveActivityName, ActivityKind.Consumer);
-
-        Telemetry.FillReceiveActivity(ref activity, item.Headers, item.Subject, item.ReplyTo);
-
-        // Set the current. We expect to consuming thread here to call TryRead again when it's done with the message.
-        Activity.Current = activity;
-
-        return true;
-    }
-}
-
-public static class Ext
-{
-    /// <summary>
-    /// Creates and starts a receive activity. Dispose the activity to signal end of processing the message.
-    /// </summary>
-    /// <param name="msg"></param>
-    /// <returns></returns>
-    public static Activity? StartReceiveActivity(this in NatsMsg msg)
-    {
-        var activity = Telemetry.NatsActivities.StartActivity(Telemetry.Constants.ReceiveActivityName, ActivityKind.Consumer);
-        Telemetry.FillReceiveActivity(ref activity, msg.Headers, msg.Subject, msg.ReplyTo);
-        return activity;
     }
 }
 

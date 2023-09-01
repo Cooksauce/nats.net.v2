@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.ExceptionServices;
 using System.Threading.Channels;
 using NATS.Client.Core.Internal;
@@ -24,11 +25,9 @@ public sealed class NatsSub : NatsSubBase, INatsSub
     {
         _msgs = Channel.CreateBounded<NatsMsg>(
             GetChannelOptions(opts?.ChannelOptions));
-
-        Msgs = new ActivityChannelReader(_msgs.Reader);
     }
 
-    public ChannelReader<NatsMsg> Msgs { get; }
+    public ChannelReader<NatsMsg> Msgs => _msgs.Reader;
 
     internal static BoundedChannelOptions GetChannelOptions(
         NatsSubChannelOpts? subChannelOpts)
@@ -53,6 +52,7 @@ public sealed class NatsSub : NatsSubBase, INatsSub
         }
     }
 
+    [SuppressMessage("ReSharper", "ExplicitCallerInfoArgument", Justification = "We want a specific activity name.")]
     protected override async ValueTask ReceiveInternalAsync(string subject, string? replyTo, ReadOnlySequence<byte>? headersBuffer, ReadOnlySequence<byte> payloadBuffer)
     {
         Activity.Current = null;
@@ -89,15 +89,14 @@ public sealed class NatsSub<T> : NatsSubBase, INatsSub<T>
         _msgs = Channel.CreateBounded<NatsMsg<T?>>(
             NatsSub.GetChannelOptions(opts?.ChannelOptions));
 
-        Msgs = new ActivityChannelReader<T?>(_msgs.Reader);
-
         Serializer = serializer;
     }
 
-    public ChannelReader<NatsMsg<T?>> Msgs { get; }
+    public ChannelReader<NatsMsg<T?>> Msgs => _msgs.Reader;
 
     private INatsSerializer Serializer { get; }
 
+    [SuppressMessage("ReSharper", "ExplicitCallerInfoArgument", Justification = "We want a specific activity name.")]
     protected override async ValueTask ReceiveInternalAsync(string subject, string? replyTo, ReadOnlySequence<byte>? headersBuffer, ReadOnlySequence<byte> payloadBuffer)
     {
         Activity.Current = null;
