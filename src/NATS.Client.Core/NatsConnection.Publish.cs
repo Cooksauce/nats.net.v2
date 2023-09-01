@@ -20,7 +20,7 @@ public partial class NatsConnection
     /// <inheritdoc />
     public ValueTask PublishAsync(in NatsMsg msg, NatsPubOpts? opts = default, CancellationToken cancellationToken = default)
     {
-        return PublishAsync(msg.Subject, msg.Data, opts, cancellationToken);
+        return PublishAsync(msg.Subject, new ReadOnlySequence<byte>(msg.Data), opts, cancellationToken);
     }
 
     /// <inheritdoc />
