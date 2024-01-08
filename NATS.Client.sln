@@ -23,6 +23,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "files", "files", "{899BE3EA
 		.github\workflows\build-debug.yml = .github\workflows\build-debug.yml
 		.github\workflows\build-release.yml = .github\workflows\build-release.yml
 		Directory.Build.props = Directory.Build.props
+		shell.nix = shell.nix
 	EndProjectSection
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NATS.Client.Hosting", "src\NATS.Client.Hosting\NATS.Client.Hosting.csproj", "{D3F09B30-1ED5-48C2-81CD-A2AD88E751AC}"

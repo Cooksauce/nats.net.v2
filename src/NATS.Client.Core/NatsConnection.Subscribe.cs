@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace NATS.Client.Core;
@@ -20,6 +21,7 @@ public partial class NatsConnection
         using var anchor = RegisterSubAnchor(sub);
 
         await SubAsync(sub, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var idx = 0;
 
         // We don't cancel the channel reader here because we want to keep reading until the subscription
         // channel writer completes so that messages left in the channel can be consumed before exit the loop.
@@ -27,6 +29,7 @@ public partial class NatsConnection
         {
             while (sub.Msgs.TryRead(out var msg))
             {
+                Activity.Current = new Activity($"some subscribe activity: {idx++}");
                 yield return msg;
             }
         }

@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Primitives;
 
@@ -63,6 +64,8 @@ public class NatsHeaders : IDictionary<string, StringValues>
     private static readonly IEnumerator EmptyIEnumerator = default(Enumerator);
 
     private int _readonly = 0;
+
+    internal Activity? Activity { get; set; }
 
     public int Version => 1;
 

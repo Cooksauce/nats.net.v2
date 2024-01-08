@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using NATS.Client.Core;
@@ -436,9 +437,10 @@ internal class NatsJSOrderedPushConsumerSub<T> : NatsSubBase
         string subject,
         string? replyTo,
         ReadOnlySequence<byte>? headersBuffer,
-        ReadOnlySequence<byte> payloadBuffer)
+        ReadOnlySequence<byte> payloadBuffer,
+        Activity? activity)
     {
-        var msg = new NatsJSMsg<T>(NatsMsg<T>.Build(subject, replyTo, headersBuffer, payloadBuffer, _nats, _headerParser, _serializer), _context);
+        var msg = new NatsJSMsg<T>(NatsMsg<T>.Build(subject, replyTo, headersBuffer, payloadBuffer, _nats, _headerParser, _serializer, activity), _context);
         await _commands.WriteAsync(new NatsJSOrderedPushConsumerMsg<T> { Command = NatsJSOrderedPushConsumerCommand.Msg, Msg = msg }, _cancellationToken).ConfigureAwait(false);
     }
 

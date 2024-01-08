@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.Text;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
@@ -101,7 +102,7 @@ internal class NatsJSOrderedConsume<TMsg> : NatsSubBase
         // sufficiently large value to avoid blocking socket reads in the
         // NATS connection).
         _userMsgs = Channel.CreateBounded<NatsJSMsg<TMsg>>(1);
-        Msgs = _userMsgs.Reader;
+        Msgs = new ActivityEndingJSMsgReader<TMsg>(_userMsgs.Reader);
 
         // Capacity as 1 is enough here since it's used for signaling only.
         _pullRequests = Channel.CreateBounded<PullRequest>(1);
@@ -155,7 +156,8 @@ internal class NatsJSOrderedConsume<TMsg> : NatsSubBase
         string subject,
         string? replyTo,
         ReadOnlySequence<byte>? headersBuffer,
-        ReadOnlySequence<byte> payloadBuffer)
+        ReadOnlySequence<byte> payloadBuffer,
+        Activity? activity)
     {
         ResetHeartbeatTimer();
 
@@ -279,7 +281,8 @@ internal class NatsJSOrderedConsume<TMsg> : NatsSubBase
                     payloadBuffer,
                     Connection,
                     Connection.HeaderParser,
-                    _serializer),
+                    _serializer,
+                    activity),
                 _context);
 
             lock (_pendingGate)

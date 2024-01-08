@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
 namespace NATS.Client.Core;
@@ -118,7 +119,8 @@ public readonly record struct NatsMsg<T>(
     int Size,
     NatsHeaders? Headers,
     T? Data,
-    INatsConnection? Connection) : INatsMsg<T>
+    INatsConnection? Connection,
+    Activity? Activity = null) : INatsMsg<T>
 {
     internal static NatsMsg<T> Build(
         string subject,
@@ -127,8 +129,11 @@ public readonly record struct NatsMsg<T>(
         in ReadOnlySequence<byte> payloadBuffer,
         INatsConnection? connection,
         NatsHeaderParser headerParser,
-        INatsDeserialize<T> serializer)
+        INatsDeserialize<T> serializer,
+        Activity? activity)
     {
+        Telemetry.AddBodySize(activity, bodySize: payloadBuffer.Length);
+
         // Consider an empty payload as null or default value for value types. This way we are able to
         // receive sentinels as nulls or default values. This might cause an issue with where we are not
         // able to differentiate between an empty sentinel and actual default value of a struct e.g. 0 (zero).
@@ -136,17 +141,19 @@ public readonly record struct NatsMsg<T>(
             ? serializer.Deserialize(payloadBuffer)
             : default;
 
-        NatsHeaders? headers = null;
-
+        NatsHeaders? headers;
         if (headersBuffer != null)
         {
             headers = new NatsHeaders();
             if (!headerParser.ParseHeaders(new SequenceReader<byte>(headersBuffer.Value), headers))
-            {
                 throw new NatsException("Error parsing headers");
-            }
 
             headers.SetReadOnly();
+            Telemetry.FillTraceContext(activity, headers);
+        }
+        else
+        {
+            headers = null;
         }
 
         var size = subject.Length
@@ -154,7 +161,9 @@ public readonly record struct NatsMsg<T>(
                    + (headersBuffer?.Length ?? 0)
                    + payloadBuffer.Length;
 
-        return new NatsMsg<T>(subject, replyTo, (int)size, headers, data, connection);
+        var msg = new NatsMsg<T>(subject, replyTo, (int) size, headers, data, connection, activity);
+        Telemetry.AddMsg(msg.Activity, msg);
+        return msg;
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using NATS.Client.Core;
@@ -139,6 +140,8 @@ public readonly struct NatsJSMsg<T> : INatsJSMsg<T>
         _context = context;
         _replyToDateTimeAndSeq = new Lazy<NatsJSMsgMetadata?>(() => ReplyToDateTimeAndSeq.Parse(msg.ReplyTo));
     }
+
+    public Activity? Activity => _msg.Activity;
 
     /// <summary>
     /// Subject of the user message.

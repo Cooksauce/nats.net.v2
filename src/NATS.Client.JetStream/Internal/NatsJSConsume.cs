@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.Text;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
@@ -205,7 +206,8 @@ internal class NatsJSConsume<TMsg> : NatsSubBase
         string subject,
         string? replyTo,
         ReadOnlySequence<byte>? headersBuffer,
-        ReadOnlySequence<byte> payloadBuffer)
+        ReadOnlySequence<byte> payloadBuffer,
+        Activity? activity)
     {
         ResetHeartbeatTimer();
 
@@ -330,7 +332,8 @@ internal class NatsJSConsume<TMsg> : NatsSubBase
                     payloadBuffer,
                     Connection,
                     Connection.HeaderParser,
-                    _serializer),
+                    _serializer,
+                    activity),
                 _context);
 
             lock (_pendingGate)

@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.Runtime.ExceptionServices;
 using System.Threading.Channels;
 using NATS.Client.Core.Internal;
@@ -23,14 +24,15 @@ public sealed class NatsSub<T> : NatsSubBase, INatsSub<T>
             connection.GetChannelOpts(connection.Opts, opts?.ChannelOpts),
             msg => Connection.MessageDropped(this, _msgs?.Reader.Count ?? 0, msg));
 
+        Msgs = new ActivityEndingMsgReader<T>(_msgs.Reader);
         Serializer = serializer;
     }
 
-    public ChannelReader<NatsMsg<T>> Msgs => _msgs.Reader;
+    public ChannelReader<NatsMsg<T>> Msgs { get; }
 
     private INatsDeserialize<T> Serializer { get; }
 
-    protected override async ValueTask ReceiveInternalAsync(string subject, string? replyTo, ReadOnlySequence<byte>? headersBuffer, ReadOnlySequence<byte> payloadBuffer)
+    protected override async ValueTask ReceiveInternalAsync(string subject, string? replyTo, ReadOnlySequence<byte>? headersBuffer, ReadOnlySequence<byte> payloadBuffer, Activity? activity)
     {
         var natsMsg = NatsMsg<T>.Build(
             subject,
@@ -39,10 +41,10 @@ public sealed class NatsSub<T> : NatsSubBase, INatsSub<T>
             payloadBuffer,
             Connection,
             Connection.HeaderParser,
-            Serializer);
+            Serializer,
+            activity);
 
         await _msgs.Writer.WriteAsync(natsMsg).ConfigureAwait(false);
-
         DecrementMaxMsgs();
     }
 

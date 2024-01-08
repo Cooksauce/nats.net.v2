@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.Runtime.ExceptionServices;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
@@ -211,8 +212,9 @@ public abstract class NatsSubBase
 
         try
         {
+            var activity = Telemetry.CreateReceiveActivity(Connection, subscriptionSubject: Subject);
             // Need to await to handle any exceptions
-            await ReceiveInternalAsync(subject, replyTo, headersBuffer, payloadBuffer).ConfigureAwait(false);
+            await ReceiveInternalAsync(subject, replyTo, headersBuffer, payloadBuffer, activity).ConfigureAwait(false);
         }
         catch (ChannelClosedException)
         {
@@ -262,7 +264,7 @@ public abstract class NatsSubBase
     /// <param name="headersBuffer">Raw headers bytes. You can use <see cref="NatsConnection"/> <see cref="NatsHeaderParser"/> to decode them.</param>
     /// <param name="payloadBuffer">Raw payload bytes.</param>
     /// <returns></returns>
-    protected abstract ValueTask ReceiveInternalAsync(string subject, string? replyTo, ReadOnlySequence<byte>? headersBuffer, ReadOnlySequence<byte> payloadBuffer);
+    protected abstract ValueTask ReceiveInternalAsync(string subject, string? replyTo, ReadOnlySequence<byte>? headersBuffer, ReadOnlySequence<byte> payloadBuffer, Activity? activity);
 
     protected void SetException(Exception exception)
     {

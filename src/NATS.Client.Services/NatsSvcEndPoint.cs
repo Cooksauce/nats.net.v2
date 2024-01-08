@@ -184,13 +184,14 @@ public class NatsSvcEndpoint<T> : NatsSvcEndpointBase
         string subject,
         string? replyTo,
         ReadOnlySequence<byte>? headersBuffer,
-        ReadOnlySequence<byte> payloadBuffer)
+        ReadOnlySequence<byte> payloadBuffer,
+        Activity? activity)
     {
         NatsMsg<T> msg;
         Exception? exception;
         try
         {
-            msg = NatsMsg<T>.Build(subject, replyTo, headersBuffer, payloadBuffer, _nats, _nats.HeaderParser, _serializer);
+            msg = NatsMsg<T>.Build(subject, replyTo, headersBuffer, payloadBuffer, _nats, _nats.HeaderParser, _serializer, activity);
             exception = null;
         }
         catch (Exception e)
@@ -201,7 +202,7 @@ public class NatsSvcEndpoint<T> : NatsSvcEndpointBase
             // Most likely a serialization error.
             // Make sure we have a valid message
             // so handler can reply with an error.
-            msg = new NatsMsg<T>(subject, replyTo, subject.Length + (replyTo?.Length ?? 0), default, default, _nats);
+            msg = new NatsMsg<T>(subject, replyTo, subject.Length + (replyTo?.Length ?? 0), default, default, _nats, activity);
         }
 
         return _channel.Writer.WriteAsync(new NatsSvcMsg<T>(msg, this, exception), _cancellationToken);
