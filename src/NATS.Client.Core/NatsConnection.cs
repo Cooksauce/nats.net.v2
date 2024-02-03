@@ -532,7 +532,7 @@ public partial class NatsConnection : INatsConnection
             _currentConnectUri = null;
             var urlEnumerator = urls.AsEnumerable().GetEnumerator();
             NatsUri? url = null;
-            CONNECT_AGAIN:
+        CONNECT_AGAIN:
             try
             {
                 if (urlEnumerator.MoveNext())
