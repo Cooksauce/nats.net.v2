@@ -156,7 +156,6 @@ internal class NatsJSConsume<TMsg> : NatsSubBase
         }
 
         return Connection.PublishAsync(
-            Telemetry.NatsInternalActivities,
             subject: $"{_context.Opts.Prefix}.CONSUMER.MSG.NEXT.{_stream}.{_consumer}",
             data: request,
             replyTo: Subject,
@@ -324,10 +323,25 @@ internal class NatsJSConsume<TMsg> : NatsSubBase
         }
         else
         {
+            var size = subject.Length
+                + (replyTo?.Length ?? 0)
+                + (headersBuffer?.Length ?? 0)
+                + payloadBuffer.Length;
+
+            var activity = JSTelemetry.JSReceive(
+                connection: Connection,
+                stream: _stream,
+                streamSubject: null, // TODO: how should mappings, external sources, etc be handled?
+                consumerInbox: Subject,
+                queueGroup: QueueGroup,
+                subject: subject,
+                replyTo: replyTo,
+                bodySize: payloadBuffer.Length,
+                size: size);
+
             var msg = new NatsJSMsg<TMsg>(
                 ParseMsg(
-                    Telemetry.NatsActivities,
-                    activityName: "js_receive",
+                    activity: activity,
                     subject: subject,
                     replyTo: replyTo,
                     headersBuffer,

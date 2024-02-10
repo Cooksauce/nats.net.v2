@@ -4,8 +4,7 @@ namespace NATS.Client.Core;
 
 public partial class NatsConnection
 {
-    internal async ValueTask<NatsSub<TReply>> RequestSubAsync<TRequest, TReply>(
-        ActivitySource activitySource,
+    internal async ValueTask<NatsRequestSub<TReply>> RequestSubAsync<TRequest, TReply>(
         string subject,
         TRequest? data,
         NatsHeaders? headers = default,
@@ -16,13 +15,14 @@ public partial class NatsConnection
         CancellationToken cancellationToken = default)
     {
         var replyTo = NewInbox();
+        var currentActivity = Activity.Current;
 
         replySerializer ??= Opts.SerializerRegistry.GetDeserializer<TReply>();
-        var sub = new NatsSub<TReply>(activitySource, this, SubscriptionManager.InboxSubBuilder, replyTo, queueGroup: default, replyOpts, replySerializer);
+        var sub = new NatsRequestSub<TReply>(currentActivity, this, SubscriptionManager.InboxSubBuilder, subject: replyTo, queueGroup: default, replyOpts, replySerializer);
         await SubAsync(sub, cancellationToken).ConfigureAwait(false);
 
         requestSerializer ??= Opts.SerializerRegistry.GetSerializer<TRequest>();
-        await PublishAsync(activitySource, subject, data, headers, replyTo, requestSerializer, cancellationToken).ConfigureAwait(false);
+        await PublishAsync(subject, data, headers, replyTo, requestSerializer, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return sub;
     }

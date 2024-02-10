@@ -15,13 +15,14 @@ public static class TracingSetup
         Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:16023");    // set to an OTLP endpoint
     }
 
-    public static TracerProvider RunSandboxTracing(bool console = false, bool internalTraces = false)
+    public static TracerProvider RunSandboxTracing(bool console = false, bool internalTraces = false, string? additionalSource = null)
     {
         SetSandboxEnv();
         return new TracerProviderBuilderBase()
                    .ConfigureResource(o => o.AddTelemetrySdk())
                    .AddNatsInstrumentation(includeInternal: internalTraces)
                    .MaybeAddInternalSource(internalTraces)
+                   .MaybeAddSource(additionalSource)
                    .AddOtlpExporter()
                    .MaybeAddConsoleExporter(console)
                    .Build()
@@ -32,5 +33,8 @@ public static class TracingSetup
         => console ? builder.AddConsoleExporter() : builder;
 
     private static TracerProviderBuilder MaybeAddInternalSource(this TracerProviderBuilder builder, bool internalTraces)
-        => internalTraces ? builder.AddSource("NATS.Client.Internal") : builder;
+        => builder.MaybeAddSource(internalTraces ? "NATS.Client.Internal" : null);
+
+    private static TracerProviderBuilder MaybeAddSource(this TracerProviderBuilder builder, string? source)
+        => source is not null ? builder.AddSource(source) : builder;
 }

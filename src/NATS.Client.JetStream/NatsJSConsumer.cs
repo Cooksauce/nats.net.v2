@@ -61,6 +61,9 @@ public class NatsJSConsumer : INatsJSConsumer
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         opts ??= _context.Opts.DefaultConsumeOpts;
+
+        using var activity = JSTelemetry.StartJSControlFlow(_context.Connection, "consume", stream: _stream, consumer: _consumer);
+
         await using var cc = await ConsumeInternalAsync<T>(serializer, opts, cancellationToken).ConfigureAwait(false);
 
         // Keep subscription alive (since it's a weak ref in subscription manager) until we're done.
@@ -141,6 +144,8 @@ public class NatsJSConsumer : INatsJSConsumer
         opts ??= _context.Opts.DefaultNextOpts;
         serializer ??= _context.Connection.Opts.SerializerRegistry.GetDeserializer<T>();
 
+        using var activity = JSTelemetry.StartJSControlFlow(_context.Connection, "fetch_next", stream: _stream, consumer: _consumer);
+
         await using var f = await FetchInternalAsync<T>(
             new NatsJSFetchOpts
             {
@@ -171,6 +176,8 @@ public class NatsJSConsumer : INatsJSConsumer
     {
         ThrowIfDeleted();
         serializer ??= _context.Connection.Opts.SerializerRegistry.GetDeserializer<T>();
+
+        using var activity = JSTelemetry.StartJSControlFlow(_context.Connection, "fetch", stream: _stream, consumer: _consumer);
 
         await using var fc = await FetchInternalAsync<T>(opts, serializer, cancellationToken).ConfigureAwait(false);
 
@@ -283,7 +290,6 @@ public class NatsJSConsumer : INatsJSConsumer
     /// <exception cref="NatsJSApiException">Server responded with an error.</exception>
     public async ValueTask RefreshAsync(CancellationToken cancellationToken = default) =>
         Info = await _context.JSRequestResponseAsync<object, ConsumerInfo>(
-            Telemetry.NatsActivities,
             subject: $"{_context.Opts.Prefix}.CONSUMER.INFO.{_stream}.{_consumer}",
             request: null,
             cancellationToken).ConfigureAwait(false);

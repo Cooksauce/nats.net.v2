@@ -190,9 +190,22 @@ public class NatsSvcEndpoint<T> : NatsSvcEndpointBase
         Exception? exception;
         try
         {
+            var size = subject.Length
+                       + (replyTo?.Length ?? 0)
+                       + (headersBuffer?.Length ?? 0)
+                       + payloadBuffer.Length;
+
+            var activity = Telemetry.Receive(
+                connection: Connection,
+                subscriptionSubject: Subject,
+                queueGroup: QueueGroup,
+                subject: subject,
+                replyTo: replyTo,
+                bodySize: payloadBuffer.Length,
+                size: size);
+
             msg = ParseMsg(
-                activitySource: Telemetry.NatsActivities,
-                activityName: "svc_receive",
+                activity,
                 subject: subject,
                 replyTo: replyTo,
                 headersBuffer,

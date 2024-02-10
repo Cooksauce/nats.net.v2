@@ -53,10 +53,23 @@ internal class NatsKVWatchSub<T> : NatsSubBase
         ReadOnlySequence<byte>? headersBuffer,
         ReadOnlySequence<byte> payloadBuffer)
     {
+        var size = subject.Length
+                    + (replyTo?.Length ?? 0)
+                    + (headersBuffer?.Length ?? 0)
+                    + payloadBuffer.Length;
+
+        var activity = Telemetry.Receive(
+            Connection,
+            subscriptionSubject: Subject,
+            queueGroup: QueueGroup,
+            subject: subject,
+            replyTo: replyTo,
+            bodySize: payloadBuffer.Length,
+            size: size);
+
         var msg = new NatsJSMsg<T>(
             ParseMsg(
-                activitySource: Telemetry.NatsInternalActivities,
-                activityName: "kv_cmd_receive",
+                activity,
                 subject: subject,
                 replyTo: replyTo,
                 headersBuffer,

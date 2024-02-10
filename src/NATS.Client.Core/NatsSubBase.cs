@@ -348,14 +348,16 @@ public abstract class NatsSubBase
 #pragma warning restore CA2012
     }
 
-    protected NatsMsg<T> ParseMsg<T>(
-        ActivitySource activitySource,
-        string activityName,
+    protected internal NatsMsg<T> ParseMsg<T>(
+        Activity? activity,
+        // ReceiveActivityCreator activityCreator,
+        // ActivitySource activitySource,
+        // string activityName,
         string subject,
         string? replyTo,
         ReadOnlySequence<byte>? headersBuffer,
         in ReadOnlySequence<byte> payloadBuffer,
-        INatsConnection? connection,
+        NatsConnection? connection,
         NatsHeaderParser headerParser,
         INatsDeserialize<T> serializer)
     {
@@ -365,6 +367,10 @@ public abstract class NatsSubBase
             headers = new NatsHeaders();
             if (!headerParser.ParseHeaders(new SequenceReader<byte>(headersBuffer.Value), headers))
                 throw new NatsException("Error parsing headers");
+
+            // we always want to propagate trace context, even when nats telemetry is off
+            if (Telemetry.TryParseTraceContext(headers, out var traceCtx))
+                headers.SetParentActivityCtx(in traceCtx);
         }
         else
         {
@@ -376,23 +382,25 @@ public abstract class NatsSubBase
                    + (headersBuffer?.Length ?? 0)
                    + payloadBuffer.Length;
 
-        var activity = Telemetry.StartReceiveActivity(
-            activitySource,
-            Connection,
-            name: activityName,
-            subscriptionSubject: Subject,
-            queueGroup: QueueGroup,
-            subject: subject,
-            replyTo: replyTo,
-            bodySize: payloadBuffer.Length,
-            size: size,
-            headers: headers);
-
         if (activity is not null)
         {
             headers ??= new NatsHeaders();
-            headers.Activity = activity;
+            if (headers.ActivityContext != default)
+                activity.SetParentId(headers.ActivityContext.TraceId, headers.ActivityContext.SpanId, headers.ActivityContext.TraceFlags);
+
+            activity.Start();
+            headers.SetReceiveActivity(activity);
         }
+
+        // Telemetry.Receive(
+        //     Connection,
+        //     subscriptionSubject: Subject,
+        //     queueGroup: QueueGroup,
+        //     subject: subject,
+        //     replyTo: replyTo,
+        //     bodySize: payloadBuffer.Length,
+        //     size: size,
+        //     headers: ref headers);
 
         headers?.SetReadOnly();
 

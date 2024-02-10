@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 using NATS.Client.Core;
@@ -65,6 +66,8 @@ public class NatsJSOrderedConsumer : INatsJSConsumer
         var consumerName = string.Empty;
         var notificationHandler = opts.NotificationHandler;
 
+        using var activity = JSTelemetry.StartJSControlFlow(_context.Connection, "ordered_consume", stream: _stream, consumer: null);
+
         try
         {
             cancellationToken = CancellationTokenSource.CreateLinkedTokenSource(_cancellationToken, cancellationToken).Token;
@@ -75,6 +78,8 @@ public class NatsJSOrderedConsumer : INatsJSConsumer
                 var consumer = await RecreateConsumer(consumerName, seq, cancellationToken);
                 consumerName = consumer.Info.Name;
                 _logger.LogInformation(NatsJSLogEvents.NewConsumer, "Created {ConsumerName} with sequence {Seq}", consumerName, seq);
+
+                activity?.AddTag(JSTelemetry.Constants.ConsumerName, consumerName);
 
                 NatsJSProtocolException? protocolException = default;
 
@@ -133,7 +138,7 @@ public class NatsJSOrderedConsumer : INatsJSConsumer
                     }
                 }
 
-            CONSUME_LOOP:
+                CONSUME_LOOP:
 
                 _logger.LogWarning(NatsJSLogEvents.Internal, "Consumer loop exited");
 
@@ -181,8 +186,12 @@ public class NatsJSOrderedConsumer : INatsJSConsumer
     {
         cancellationToken = CancellationTokenSource.CreateLinkedTokenSource(_cancellationToken, cancellationToken).Token;
 
+        using var activity = JSTelemetry.StartJSControlFlow(_context.Connection, "ordered_fetch", stream: _stream, consumer: null);
+
         var consumer = await RecreateConsumer(_fetchConsumerName, _fetchSeq, cancellationToken);
         _fetchConsumerName = consumer.Info.Name;
+
+        activity?.AddTag(JSTelemetry.Constants.ConsumerName, _fetchConsumerName);
 
         await foreach (var msg in consumer.FetchAsync(opts, serializer, cancellationToken))
         {
@@ -210,6 +219,8 @@ public class NatsJSOrderedConsumer : INatsJSConsumer
     public async ValueTask<NatsJSMsg<T>?> NextAsync<T>(INatsDeserialize<T>? serializer = default, NatsJSNextOpts? opts = default, CancellationToken cancellationToken = default)
     {
         opts ??= _context.Opts.DefaultNextOpts;
+
+        using var activity = JSTelemetry.StartJSControlFlow(_context.Connection, "ordered_fetch_next", stream: _stream, consumer: null);
 
         var fetchOpts = new NatsJSFetchOpts
         {
@@ -253,7 +264,7 @@ public class NatsJSOrderedConsumer : INatsJSConsumer
 
                     try
                     {
-                        await _context.DeleteConsumerAsync(Telemetry.NatsInternalActivities, _stream, consumer, cancellationToken);
+                        await _context.DeleteConsumerAsync(_stream, consumer, cancellationToken);
                         break;
                     }
                     catch (NatsJSApiNoResponseException)
@@ -302,7 +313,7 @@ public class NatsJSOrderedConsumer : INatsJSConsumer
     {
         try
         {
-            return await _context.DeleteConsumerAsync(Telemetry.NatsInternalActivities, _stream, consumerName, cancellationToken);
+            return await _context.DeleteConsumerAsync(_stream, consumerName, cancellationToken);
         }
         catch
         {

@@ -1,9 +1,12 @@
+using System.Diagnostics;
 using Example.Core;
 using Microsoft.Extensions.Logging;
 using NATS.Client.Core;
 using NATS.Client.Serializers.Json;
 
+using var source = new ActivitySource("Example.Core.SubscribeModel");
 using var tracer = TracingSetup.RunSandboxTracing();
+
 
 var subject = "bar.*";
 var options = NatsOpts.Default with
@@ -20,7 +23,7 @@ Print($"[SUB] Subscribing to subject '{subject}'...\n");
 
 await foreach (var msg in connection.SubscribeAsync<Bar>(subject))
 {
-    using var activity = msg.StartChildActivity();
+    using var activity = msg.StartChildActivity(source);
     Print($"[RCV] {msg.Subject}: {msg.Data}\n");
 }
 

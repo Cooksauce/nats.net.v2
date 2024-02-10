@@ -73,7 +73,47 @@ public class NatsHeaders : IDictionary<string, StringValues>
 
     public Messages Message { get; internal set; } = Messages.Text;
 
-    internal Activity? Activity { get; set; }
+    /// <summary>
+    /// The current activity context associated with this message. This commonly represents the one of the following:
+    /// <list type="bullet">
+    ///     <item>When publishing, the context of the current activity.</item>
+    ///     <item>When receiving w/out nats telemetry, the context of publisher.</item>
+    ///     <item>When receiving w/ nats telemetry, the context of the receive activity in the subscription.</item>
+    /// </list>
+    /// </summary>
+    /// <remarks>
+    /// On headers received with no trace context, this value is default(ActivityContext).
+    /// </remarks>
+    internal ActivityContext ActivityContext { get; set; }
+
+    /// <summary>
+    /// The current activity context associated with this message. This commonly represents the one of the following:
+    /// <list type="bullet">
+    ///     <item>When publishing, the context of the current activity.</item>
+    ///     <item>When receiving w/out nats telemetry, the context of publisher.</item>
+    ///     <item>When receiving w/ nats telemetry, the context of the receive activity in the subscription.</item>
+    /// </list>
+    /// </summary>
+    /// <remarks>
+    /// On headers received with no trace context, this value is default(ActivityContext).
+    /// </remarks>
+    internal Activity? ReceiveActivity { get; set; }
+
+    public void SetReceiveActivity(Activity? activity)
+    {
+        ReceiveActivity = activity;
+        ActivityContext = activity?.Context ?? default(ActivityContext);
+    }
+
+    /// <summary>
+    /// Sets the activity context associated with this message, and clears the activity.
+    /// </summary>
+    /// <param name="context"></param>
+    public void SetParentActivityCtx(in ActivityContext context)
+    {
+        ReceiveActivity = null;
+        ActivityContext = context;
+    }
 
     /// <summary>
     /// Initializes a new instance of <see cref="NatsHeaders"/>.
@@ -101,6 +141,10 @@ public class NatsHeaders : IDictionary<string, StringValues>
     }
 
     private Dictionary<string, StringValues>? Store { get; set; }
+
+    internal NatsHeaders Clone() => new(Store is not null
+        ? new Dictionary<string, StringValues>(Store)
+        : new Dictionary<string, StringValues>(capacity: 0));
 
     [MemberNotNull(nameof(Store))]
     private void EnsureStore(int capacity)

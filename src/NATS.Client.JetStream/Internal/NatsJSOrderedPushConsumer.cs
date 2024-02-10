@@ -146,7 +146,7 @@ internal class NatsJSOrderedPushConsumer<T>
         await _consumerCreateTask;
         await _commandTask;
 
-        await _context.DeleteConsumerAsync(Telemetry.NatsInternalActivities, _stream, Consumer, _cancellationToken);
+        await _context.DeleteConsumerAsync(_stream, Consumer, _cancellationToken);
     }
 
     internal void Init()
@@ -196,7 +196,7 @@ internal class NatsJSOrderedPushConsumer<T>
                                 {
                                     if (headers.TryGetValue("Nats-Consumer-Stalled", out var flowControlReplyTo))
                                     {
-                                        await _nats.PublishNoneAsync(Telemetry.NatsInternalActivities, subject: flowControlReplyTo, cancellationToken: _cancellationToken);
+                                        await _nats.PublishNoneAsync(subject: flowControlReplyTo, cancellationToken: _cancellationToken);
                                     }
 
                                     if (headers is { Code: 100, MessageText: "FlowControl Request" })
@@ -321,7 +321,7 @@ internal class NatsJSOrderedPushConsumer<T>
             await _sub.DisposeAsync();
         }
 
-        _sub = new NatsJSOrderedPushConsumerSub<T>(_context, _commandChannel, _serializer, _subOpts, _cancellationToken);
+        _sub = new NatsJSOrderedPushConsumerSub<T>(_stream, _context, _commandChannel, _serializer, _subOpts, _cancellationToken);
         await _context.Connection.SubAsync(_sub, _cancellationToken).ConfigureAwait(false);
 
         if (_debug)
@@ -393,6 +393,7 @@ internal class NatsJSOrderedPushConsumer<T>
 
 internal class NatsJSOrderedPushConsumerSub<T> : NatsSubBase
 {
+    private readonly string _stream;
     private readonly NatsJSContext _context;
     private readonly CancellationToken _cancellationToken;
     private readonly NatsConnection _nats;
@@ -401,6 +402,7 @@ internal class NatsJSOrderedPushConsumerSub<T> : NatsSubBase
     private readonly ChannelWriter<NatsJSOrderedPushConsumerMsg<T>> _commands;
 
     public NatsJSOrderedPushConsumerSub(
+        string stream,
         NatsJSContext context,
         Channel<NatsJSOrderedPushConsumerMsg<T>> commandChannel,
         INatsDeserialize<T> serializer,
@@ -413,6 +415,7 @@ internal class NatsJSOrderedPushConsumerSub<T> : NatsSubBase
             queueGroup: default,
             opts)
     {
+        _stream = stream;
         _context = context;
         _cancellationToken = cancellationToken;
         _serializer = serializer;
@@ -440,10 +443,25 @@ internal class NatsJSOrderedPushConsumerSub<T> : NatsSubBase
         ReadOnlySequence<byte>? headersBuffer,
         ReadOnlySequence<byte> payloadBuffer)
     {
+        var size = subject.Length
+                   + (replyTo?.Length ?? 0)
+                   + (headersBuffer?.Length ?? 0)
+                   + payloadBuffer.Length;
+
+        var activity = JSTelemetry.JSDeliver(
+            connection: Connection,
+            stream: _stream,
+            streamSubject: null, // TODO: how should mappings, external sources, etc be handled?
+            consumerInbox: Subject,
+            queueGroup: QueueGroup,
+            subject: subject,
+            replyTo: replyTo,
+            bodySize: payloadBuffer.Length,
+            size: size);
+
         var msg = new NatsJSMsg<T>(
             ParseMsg(
-                activitySource: Telemetry.NatsInternalActivities,
-                activityName: "js_receive",
+                activity,
                 subject: subject,
                 replyTo: replyTo,
                 headersBuffer,

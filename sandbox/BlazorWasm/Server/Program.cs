@@ -10,6 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenTelemetry()
     .WithTracing(o => o
         .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
         .AddNatsInstrumentation()
         .AddOtlpExporter());
 

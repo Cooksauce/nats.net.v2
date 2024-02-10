@@ -40,7 +40,6 @@ public partial class NatsJSContext
     /// <returns>The account information based on the NATS connection credentials.</returns>
     public ValueTask<AccountInfoResponse> GetAccountInfoAsync(CancellationToken cancellationToken = default) =>
         JSRequestResponseAsync<object, AccountInfoResponse>(
-            activitySource: Telemetry.NatsActivities,
             subject: $"{Opts.Prefix}.INFO",
             request: null,
             cancellationToken);
@@ -72,17 +71,7 @@ public partial class NatsJSContext
     /// and the <c>Nats-Msg-Id</c> header value was set, <c>msgId</c> parameter value will be used.
     /// </para>
     /// </remarks>
-    public ValueTask<PubAckResponse> PublishAsync<T>(
-        string subject,
-        T? data,
-        INatsSerialize<T>? serializer = default,
-        NatsJSPubOpts? opts = default,
-        NatsHeaders? headers = default,
-        CancellationToken cancellationToken = default)
-        => PublishAsync(Telemetry.NatsActivities, subject, data, serializer, opts, headers, cancellationToken);
-
-    internal async ValueTask<PubAckResponse> PublishAsync<T>(
-        ActivitySource activitySource,
+    public async ValueTask<PubAckResponse> PublishAsync<T>(
         string subject,
         T? data,
         INatsSerialize<T>? serializer = default,
@@ -90,7 +79,7 @@ public partial class NatsJSContext
         NatsHeaders? headers = default,
         CancellationToken cancellationToken = default)
     {
-        using var activity = Telemetry.StartSendActivity(activitySource, name: "js_publish", Connection, subject, replyTo: null);
+        using var activity = JSTelemetry.StartJSPublish(Connection, subject, replyTo: null);
         try
         {
             if (opts != null)
@@ -133,7 +122,6 @@ public partial class NatsJSContext
             for (var i = 0; i < retryMax; i++)
             {
                 await using var sub = await Connection.RequestSubAsync<T, PubAckResponse>(
-                        activitySource: Telemetry.NatsInternalActivities,
                         subject: subject,
                         data: data,
                         headers: headers,
@@ -167,7 +155,7 @@ public partial class NatsJSContext
                                 throw new NatsJSException("No response data received");
                             }
 
-                            activity?.AddTag(Telemetry.Constants.JSAck, msg.Data.Error is null);
+                            activity?.AddTag(JSTelemetry.Constants.Acked, msg.Data.Error is null);
 
                             return msg.Data;
                         }
@@ -198,79 +186,66 @@ public partial class NatsJSContext
     internal string NewInbox() => NatsConnection.NewInbox(Connection.Opts.InboxPrefix);
 
     internal async ValueTask<TResponse> JSRequestResponseAsync<TRequest, TResponse>(
-        ActivitySource activitySource,
         string subject,
         TRequest? request,
         CancellationToken cancellationToken = default)
         where TRequest : class
         where TResponse : class
     {
-        var response = await JSRequestAsync<TRequest, TResponse>(activitySource, subject, request, cancellationToken);
+        var response = await JSRequestAsync<TRequest, TResponse>(subject, request, cancellationToken);
         response.EnsureSuccess();
         return response.Response!;
     }
 
     internal async ValueTask<NatsJSResponse<TResponse>> JSRequestAsync<TRequest, TResponse>(
-        ActivitySource activitySource,
         string subject,
         TRequest? request,
         CancellationToken cancellationToken = default)
         where TRequest : class
         where TResponse : class
     {
-        using var activity = Telemetry.StartSendActivity(activitySource, name: "js_publish", Connection, subject, replyTo: null);
-
         if (request != null)
         {
             // TODO: Can't validate using JSON serializer context at the moment.
             // Validator.ValidateObject(request, new ValidationContext(request));
         }
 
-        try
+        await using var sub = await Connection.RequestSubAsync<TRequest, TResponse>(
+                subject: subject,
+                data: request,
+                headers: default,
+                replyOpts: new NatsSubOpts { Timeout = Connection.Opts.RequestTimeout },
+                requestSerializer: NatsJSJsonSerializer<TRequest>.Default,
+                replySerializer: NatsJSErrorAwareJsonSerializer<TResponse>.Default,
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+        if (await sub.Msgs.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
         {
-            await using var sub = await Connection.RequestSubAsync<TRequest, TResponse>(
-                    activitySource: Telemetry.NatsInternalActivities,
-                    subject: subject,
-                    data: request,
-                    headers: default,
-                    replyOpts: new NatsSubOpts { Timeout = Connection.Opts.RequestTimeout },
-                    requestSerializer: NatsJSJsonSerializer<TRequest>.Default,
-                    replySerializer: NatsJSErrorAwareJsonSerializer<TResponse>.Default,
-                    cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-
-            if (await sub.Msgs.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
+            if (sub.Msgs.TryRead(out var msg))
             {
-                if (sub.Msgs.TryRead(out var msg))
+                if (msg.Data == null)
                 {
-                    if (msg.Data == null)
-                    {
-                        throw new NatsJSException("No response data received");
-                    }
-
-                    return new NatsJSResponse<TResponse>(msg.Data, default);
-                }
-            }
-
-            if (sub is NatsSubBase { EndReason: NatsSubEndReason.Exception, Exception: not null } sb)
-            {
-                if (sb.Exception is NatsSubException { Exception.SourceException: NatsJSApiErrorException jsError })
-                {
-                    // Clear exception here so that subscription disposal won't throw it.
-                    sb.ClearException();
-
-                    return new NatsJSResponse<TResponse>(default, jsError.Error);
+                    throw new NatsJSException("No response data received");
                 }
 
-                throw sb.Exception;
+                return new NatsJSResponse<TResponse>(msg.Data, default);
+            }
+        }
+
+        if (sub is NatsSubBase { EndReason: NatsSubEndReason.Exception, Exception: not null } sb)
+        {
+            if (sb.Exception is NatsSubException { Exception.SourceException: NatsJSApiErrorException jsError })
+            {
+                // Clear exception here so that subscription disposal won't throw it.
+                sb.ClearException();
+
+                return new NatsJSResponse<TResponse>(default, jsError.Error);
             }
 
-            throw new NatsJSApiNoResponseException();
+            throw sb.Exception;
         }
-        catch (Exception ex)
-        {
-            Telemetry.SetException(activity, ex);
-            throw;
-        }
+
+        throw new NatsJSApiNoResponseException();
     }
 }

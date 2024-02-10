@@ -16,7 +16,7 @@ internal sealed class ActivityEndingJSMsgReader<T> : ChannelReader<NatsJSMsg<T>>
         if (!_inner.TryRead(out item))
             return false;
 
-        item.Activity?.Dispose();
+        item.ReceiveActivity?.Dispose();
         return true;
     }
 

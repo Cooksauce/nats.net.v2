@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 
 namespace NATS.Client.Core;
 
@@ -42,7 +43,7 @@ public interface INatsMsg<T>
     T? Data { get; init; }
 
     /// <summary>NATS connection this message is associated to.</summary>
-    INatsConnection? Connection { get; init; }
+    INatsConnection? Connection { get; }
 
     /// <summary>
     /// Reply with an empty message.
@@ -118,13 +119,16 @@ public readonly record struct NatsMsg<T>(
     int Size,
     NatsHeaders? Headers,
     T? Data,
-    INatsConnection? Connection) : INatsMsg<T>
+    NatsConnection? Connection) : INatsMsg<T>
 {
     /// <summary>
     /// Activity used to trace the receiving of the this message. It can be used to create child activities under this context.
     /// </summary>
-    /// <seealso cref="NatsMsgTelemetryExtensions.StartChildActivity{T}"/>
-    public Activity? Activity => Headers?.Activity;
+    /// <seealso cref="NatsMsgTelemetryExtensions.GetActivityContext{T}"/>
+    internal Activity? ReceiveActivity => Headers?.ReceiveActivity;
+
+    /// <inheritdoc/>
+    INatsConnection? INatsMsg<T>.Connection => Connection;
 
     /// <summary>
     /// Reply with an empty message.
@@ -137,10 +141,7 @@ public readonly record struct NatsMsg<T>(
     public ValueTask ReplyAsync(NatsHeaders? headers = default, string? replyTo = default, NatsPubOpts? opts = default, CancellationToken cancellationToken = default)
     {
         CheckReplyPreconditions();
-        var activitySource = Activity?.Source ?? Telemetry.NatsInternalActivities;
-
-        // TODO: un-hack
-        return ((NatsConnection)Connection).PublishNoneAsync(activitySource, subject: ReplyTo, headers, replyTo, cancellationToken);
+        return Connection.PublishNoneAsync(subject: ReplyTo, headers, replyTo, cancellationToken);
     }
 
     /// <summary>
@@ -168,10 +169,7 @@ public readonly record struct NatsMsg<T>(
     public ValueTask ReplyAsync<TReply>(TReply data, NatsHeaders? headers = default, string? replyTo = default, INatsSerialize<TReply>? serializer = default, NatsPubOpts? opts = default, CancellationToken cancellationToken = default)
     {
         CheckReplyPreconditions();
-        var activitySource = Activity?.Source ?? Telemetry.NatsInternalActivities;
-
-        // TODO: un-hack
-        return ((NatsConnection)Connection).PublishAsync(activitySource, subject: ReplyTo, data, headers, replyTo, serializer, cancellationToken);
+        return Connection.PublishAsync(subject: ReplyTo, data, headers, replyTo, serializer, opts, cancellationToken);
     }
 
     /// <summary>
@@ -189,10 +187,7 @@ public readonly record struct NatsMsg<T>(
     public ValueTask ReplyAsync<TReply>(NatsMsg<TReply> msg, INatsSerialize<TReply>? serializer = default, NatsPubOpts? opts = default, CancellationToken cancellationToken = default)
     {
         CheckReplyPreconditions();
-        var activitySource = Activity?.Source ?? Telemetry.NatsInternalActivities;
-
-        // TODO: un-hack
-        return ((NatsConnection)Connection).PublishAsync(activitySource, subject: ReplyTo, msg.Data, msg.Headers, msg.ReplyTo, serializer, cancellationToken);
+        return Connection.PublishAsync(ReplyTo, msg.Data, msg.Headers, msg.ReplyTo, serializer, opts, cancellationToken);
     }
 
     [MemberNotNull(nameof(Connection))]

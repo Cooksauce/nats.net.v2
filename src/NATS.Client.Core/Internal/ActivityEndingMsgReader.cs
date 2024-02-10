@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
@@ -24,7 +25,12 @@ internal sealed class ActivityEndingMsgReader<T> : ChannelReader<NatsMsg<T>>
         if (!_inner.TryRead(out item))
             return false;
 
-        item.Activity?.Dispose();
+        if (item.ReceiveActivity is not null)
+        {
+            item.ReceiveActivity.Dispose();
+            Activity.Current = item.ReceiveActivity;
+        }
+
         return true;
     }
 

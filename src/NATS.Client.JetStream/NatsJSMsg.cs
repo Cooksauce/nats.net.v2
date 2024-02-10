@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using System.Text;
 using NATS.Client.Core;
 using NATS.Client.JetStream.Internal;
@@ -146,11 +147,6 @@ public readonly struct NatsJSMsg<T> : INatsJSMsg<T>
         _replyToDateTimeAndSeq = new Lazy<NatsJSMsgMetadata?>(() => ReplyToDateTimeAndSeq.Parse(msg.ReplyTo));
     }
 
-    /// <summary>
-    /// Activity used to trace the receiving of the this message. It can be used to create child activities under this context.
-    /// </summary>
-    /// <seealso cref="NatsJSMsgTelemetryExtensions.StartChildActivity{T}"/>
-    public Activity? Activity => _msg.Activity;
 
     /// <summary>
     /// Subject of the user message.
@@ -181,7 +177,10 @@ public readonly struct NatsJSMsg<T> : INatsJSMsg<T>
     /// <summary>
     /// The connection messages was delivered on.
     /// </summary>
-    public INatsConnection? Connection => _msg.Connection;
+    public NatsConnection? Connection => _msg.Connection;
+
+    /// <inheritdoc/>
+    INatsConnection? INatsJSMsg<T>.Connection => Connection;
 
     /// <summary>
     /// Additional metadata about the message.
@@ -193,7 +192,15 @@ public readonly struct NatsJSMsg<T> : INatsJSMsg<T>
     /// </summary>
     public string? ReplyTo => _msg.ReplyTo;
 
+    /// <summary>
+    /// Activity used to trace the receiving of the this message. It can be used to create child activities under this context.
+    /// </summary>
+    /// <seealso cref="NatsJSMsgTelemetryExtensions.StartChildActivity{T}"/>
+    internal Activity? ReceiveActivity => _msg.ReceiveActivity;
+
     internal NatsMsg<T> Msg => _msg;
+
+    public ActivityContext GetActivityContext() => Headers?.ActivityContext ?? default;
 
     /// <summary>
     /// Reply with an empty message.
@@ -203,8 +210,8 @@ public readonly struct NatsJSMsg<T> : INatsJSMsg<T>
     /// <param name="opts">A <see cref="NatsPubOpts"/> for publishing options.</param>
     /// <param name="cancellationToken">A <see cref="CancellationToken"/> used to cancel the command.</param>
     /// <returns>A <see cref="ValueTask"/> that represents the asynchronous send operation.</returns>
-    public ValueTask ReplyAsync(NatsHeaders? headers = default, string? replyTo = default, NatsPubOpts? opts = default, CancellationToken cancellationToken = default) =>
-        _msg.ReplyAsync(headers, replyTo, opts, cancellationToken);
+    public ValueTask ReplyAsync(NatsHeaders? headers = default, string? replyTo = default, NatsPubOpts? opts = default, CancellationToken cancellationToken = default)
+        => _msg.ReplyAsync(headers, replyTo, opts, cancellationToken);
 
     /// <summary>
     /// Acknowledges the message was completely handled.
@@ -212,7 +219,8 @@ public readonly struct NatsJSMsg<T> : INatsJSMsg<T>
     /// <param name="opts">Ack options.</param>
     /// <param name="cancellationToken">A <see cref="CancellationToken"/> used to cancel the call.</param>
     /// <returns>A <see cref="ValueTask"/> representing the async call.</returns>
-    public ValueTask AckAsync(AckOpts? opts = default, CancellationToken cancellationToken = default) => SendAckAsync(NatsJSConstants.Ack, opts, cancellationToken);
+    public ValueTask AckAsync(AckOpts? opts = default, CancellationToken cancellationToken = default)
+        => SendAckAsync(NatsJSConstants.Ack, opts, cancellationToken);
 
     /// <summary>
     /// Signals that the message will not be processed now and processing can move onto the next message.
@@ -254,7 +262,8 @@ public readonly struct NatsJSMsg<T> : INatsJSMsg<T>
     /// by another amount of time equal to <c>ack_wait</c> by the NATS JetStream server.
     /// </para>
     /// </remarks>
-    public ValueTask AckProgressAsync(AckOpts? opts = default, CancellationToken cancellationToken = default) => SendAckAsync(NatsJSConstants.AckProgress, opts, cancellationToken);
+    public ValueTask AckProgressAsync(AckOpts? opts = default, CancellationToken cancellationToken = default)
+        => SendAckAsync(NatsJSConstants.AckProgress, opts, cancellationToken);
 
     /// <summary>
     /// Instructs the server to stop redelivery of the message without acknowledging it as successfully processed.
@@ -262,21 +271,21 @@ public readonly struct NatsJSMsg<T> : INatsJSMsg<T>
     /// <param name="opts">Ack options.</param>
     /// <param name="cancellationToken">A <see cref="CancellationToken"/> used to cancel the call.</param>
     /// <returns>A <see cref="ValueTask"/> representing the async call.</returns>
-    public ValueTask AckTerminateAsync(AckOpts? opts = default, CancellationToken cancellationToken = default) => SendAckAsync(NatsJSConstants.AckTerminate, opts, cancellationToken);
+    public ValueTask AckTerminateAsync(AckOpts? opts = default, CancellationToken cancellationToken = default)
+        => SendAckAsync(NatsJSConstants.AckTerminate, opts, cancellationToken);
+
+    internal static ref readonly NatsMsg<T> GetMsgRef(in NatsJSMsg<T> jsMsg) => ref jsMsg._msg;
 
     private async ValueTask SendAckAsync(ReadOnlySequence<byte> payload, AckOpts? opts = default, CancellationToken cancellationToken = default)
     {
         CheckPreconditions();
-        var activitySource = Activity?.Source ?? Telemetry.NatsInternalActivities;
 
         if (_msg == default)
             throw new NatsJSException("No user message, can't acknowledge");
 
         if (opts?.DoubleAck ?? _context.Opts.DoubleAck)
         {
-            // TODO: un-hack
-            await ((NatsConnection)Connection).RequestAsync<ReadOnlySequence<byte>, object?>(
-                activitySource,
+            await Connection.RequestAsync<ReadOnlySequence<byte>, object?>(
                 subject: ReplyTo,
                 data: payload,
                 requestSerializer: NatsRawSerializer<ReadOnlySequence<byte>>.Default,
@@ -285,14 +294,11 @@ public readonly struct NatsJSMsg<T> : INatsJSMsg<T>
         }
         else
         {
-            var sub = ReplyTo;
-            if (string.IsNullOrWhiteSpace(sub))
+            if (string.IsNullOrWhiteSpace(ReplyTo))
                 throw new NatsException("unable to send reply; ReplyTo is empty");
 
-            // TODO: un-hack
-            await ((NatsConnection)Connection).PublishAsync(
-                activitySource,
-                subject: sub,
+            await Connection.PublishAsync(
+                subject: ReplyTo,
                 data: payload,
                 serializer: NatsRawSerializer<ReadOnlySequence<byte>>.Default,
                 cancellationToken: cancellationToken);
@@ -324,4 +330,9 @@ public readonly record struct AckOpts
     /// Ask server for an acknowledgment
     /// </summary>
     public bool? DoubleAck { get; init; }
+}
+
+public static class Ext
+{
+    public static ref readonly NatsMsg<T> GetMsgRef<T>(this in NatsJSMsg<T> msg) => ref NatsJSMsg<T>.GetMsgRef(in msg);
 }

@@ -25,15 +25,8 @@ public partial class NatsJSContext : INatsJSContext
         return new ValueTask<INatsJSConsumer>(new NatsJSOrderedConsumer(stream, this, opts, cancellationToken));
     }
 
-    /// <inheritdoc />>
-    public ValueTask<INatsJSConsumer> CreateOrUpdateConsumerAsync(
-        string stream,
-        ConsumerConfig config,
-        CancellationToken cancellationToken = default)
-        => CreateOrUpdateConsumerAsync(Telemetry.NatsActivities, stream, config, cancellationToken);
-
-    internal async ValueTask<INatsJSConsumer> CreateOrUpdateConsumerAsync(
-        ActivitySource activitySource,
+    /// <inheritdoc />
+    public async ValueTask<INatsJSConsumer> CreateOrUpdateConsumerAsync(
         string stream,
         ConsumerConfig config,
         CancellationToken cancellationToken = default)
@@ -52,17 +45,21 @@ public partial class NatsJSContext : INatsJSContext
             subject += $".{config.FilterSubject}";
         }
 
-        var response = await JSRequestResponseAsync<ConsumerCreateRequest, ConsumerInfo>(
-            activitySource,
-            subject: subject,
-            new ConsumerCreateRequest
-            {
-                StreamName = stream,
-                Config = config,
-            },
-            cancellationToken);
+        using var activity = JSTelemetry.StartJSOperation(Connection, "create_consumer", stream: stream, consumer: config.Name);
+        try
+        {
+            var response = await JSRequestResponseAsync<ConsumerCreateRequest, ConsumerInfo>(
+                subject: subject,
+                new ConsumerCreateRequest { StreamName = stream, Config = config, },
+                cancellationToken);
 
-        return new NatsJSConsumer(this, response);
+            return new NatsJSConsumer(this, response);
+        }
+        catch (Exception ex)
+        {
+            Telemetry.SetException(activity, ex);
+            throw;
+        }
     }
 
     /// <summary>
@@ -77,12 +74,20 @@ public partial class NatsJSContext : INatsJSContext
     [SuppressMessage("StyleCop.CSharp.OrderingRules", "SA1202:Elements should be ordered by access", Justification = "Internal is wrapped by public method.")]
     public async ValueTask<INatsJSConsumer> GetConsumerAsync(string stream, string consumer, CancellationToken cancellationToken = default)
     {
-        var response = await JSRequestResponseAsync<object, ConsumerInfo>(
-            Telemetry.NatsActivities,
-            subject: $"{Opts.Prefix}.CONSUMER.INFO.{stream}.{consumer}",
-            request: null,
-            cancellationToken);
-        return new NatsJSConsumer(this, response);
+        using var activity = JSTelemetry.StartJSOperation(Connection, "create_consumer", stream: stream, consumer: consumer);
+        try
+        {
+            var response = await JSRequestResponseAsync<object, ConsumerInfo>(
+                subject: $"{Opts.Prefix}.CONSUMER.INFO.{stream}.{consumer}",
+                request: null,
+                cancellationToken);
+            return new NatsJSConsumer(this, response);
+        }
+        catch (Exception ex)
+        {
+            Telemetry.SetException(activity, ex);
+            throw;
+        }
     }
 
     /// <inheritdoc />
@@ -90,19 +95,27 @@ public partial class NatsJSContext : INatsJSContext
         string stream,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        using var activity = JSTelemetry.StartJSOperation(Connection, "list_consumers", stream: stream, consumer: null);
+
         var offset = 0;
         while (!cancellationToken.IsCancellationRequested)
         {
-            var response = await JSRequestResponseAsync<ConsumerListRequest, ConsumerListResponse>(
-                Telemetry.NatsActivities,
-                subject: $"{Opts.Prefix}.CONSUMER.LIST.{stream}",
-                new ConsumerListRequest { Offset = offset },
-                cancellationToken);
+            ConsumerListResponse response;
+            try
+            {
+                response = await JSRequestResponseAsync<ConsumerListRequest, ConsumerListResponse>(
+                    subject: $"{Opts.Prefix}.CONSUMER.LIST.{stream}",
+                    new ConsumerListRequest { Offset = offset },
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                Telemetry.SetException(activity, ex);
+                throw;
+            }
 
             if (response.Consumers.Count == 0)
-            {
                 yield break;
-            }
 
             foreach (var consumer in response.Consumers)
                 yield return new NatsJSConsumer(this, consumer);
@@ -116,14 +129,24 @@ public partial class NatsJSContext : INatsJSContext
         string stream,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        using var activity = JSTelemetry.StartJSOperation(Connection, "list_consumer_names", stream: stream, consumer: null);
+
         var offset = 0;
         while (!cancellationToken.IsCancellationRequested)
         {
-            var response = await JSRequestResponseAsync<ConsumerNamesRequest, ConsumerNamesResponse>(
-                Telemetry.NatsActivities,
-                subject: $"{Opts.Prefix}.CONSUMER.NAMES.{stream}",
-                new ConsumerNamesRequest { Offset = offset },
-                cancellationToken);
+            ConsumerNamesResponse response;
+            try
+            {
+                response = await JSRequestResponseAsync<ConsumerNamesRequest, ConsumerNamesResponse>(
+                    subject: $"{Opts.Prefix}.CONSUMER.NAMES.{stream}",
+                    new ConsumerNamesRequest { Offset = offset },
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                Telemetry.SetException(activity, ex);
+                throw;
+            }
 
             if (response.Consumers.Count == 0)
                 yield break;
@@ -144,17 +167,22 @@ public partial class NatsJSContext : INatsJSContext
     /// <returns>Whether the deletion was successful.</returns>
     /// <exception cref="NatsJSException">There was an issue retrieving the response.</exception>
     /// <exception cref="NatsJSApiException">Server responded with an error.</exception>
-    public ValueTask<bool> DeleteConsumerAsync(string stream, string consumer, CancellationToken cancellationToken = default)
-        => DeleteConsumerAsync(Telemetry.NatsActivities, stream, consumer, cancellationToken);
-
-    public async ValueTask<bool> DeleteConsumerAsync(ActivitySource activitySource, string stream, string consumer, CancellationToken cancellationToken = default)
+    public async ValueTask<bool> DeleteConsumerAsync(string stream, string consumer, CancellationToken cancellationToken = default)
     {
-        var response = await JSRequestResponseAsync<object, ConsumerDeleteResponse>(
-            activitySource,
-            subject: $"{Opts.Prefix}.CONSUMER.DELETE.{stream}.{consumer}",
-            request: null,
-            cancellationToken);
-        return response.Success;
+        using var activity = JSTelemetry.StartJSOperation(Connection, "delete_consumer", stream: stream, consumer: consumer);
+        try
+        {
+            var response = await JSRequestResponseAsync<object, ConsumerDeleteResponse>(
+                subject: $"{Opts.Prefix}.CONSUMER.DELETE.{stream}.{consumer}",
+                request: null,
+                cancellationToken);
+            return response.Success;
+        }
+        catch (Exception ex)
+        {
+            Telemetry.SetException(activity, ex);
+            throw;
+        }
     }
 
     internal ValueTask<ConsumerInfo> CreateOrderedConsumerInternalAsync(
@@ -199,10 +227,18 @@ public partial class NatsJSContext : INatsJSContext
         var name = NuidWriter.NewNuid();
         var subject = $"{Opts.Prefix}.CONSUMER.CREATE.{stream}.{name}";
 
-        return JSRequestResponseAsync<ConsumerCreateRequest, ConsumerInfo>(
-            activitySource: Telemetry.NatsInternalActivities,
-            subject: subject,
-            request,
-            cancellationToken);
+        using var activity = JSTelemetry.StartJSOperation(Connection, "create_consumer", stream: stream, consumer: name);
+        try
+        {
+            return JSRequestResponseAsync<ConsumerCreateRequest, ConsumerInfo>(
+                subject: subject,
+                request,
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            Telemetry.SetException(activity, ex);
+            throw;
+        }
     }
 }

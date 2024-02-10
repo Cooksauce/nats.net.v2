@@ -19,12 +19,20 @@ public partial class NatsJSContext
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(config.Name, nameof(config.Name));
-        var response = await JSRequestResponseAsync<StreamConfig, StreamInfo>(
-            Telemetry.NatsActivities,
-            subject: $"{Opts.Prefix}.STREAM.CREATE.{config.Name}",
-            config,
-            cancellationToken);
-        return new NatsJSStream(this, response);
+        using var activity = JSTelemetry.StartJSOperation(Connection, "create_stream", config.Name);
+        try
+        {
+            var response = await JSRequestResponseAsync<StreamConfig, StreamInfo>(
+                subject: $"{Opts.Prefix}.STREAM.CREATE.{config.Name}",
+                config,
+                cancellationToken);
+            return new NatsJSStream(this, response);
+        }
+        catch (Exception ex)
+        {
+            Telemetry.SetException(activity, ex);
+            throw;
+        }
     }
 
     /// <summary>
@@ -39,12 +47,20 @@ public partial class NatsJSContext
         string stream,
         CancellationToken cancellationToken = default)
     {
-        var response = await JSRequestResponseAsync<object, StreamMsgDeleteResponse>(
-            Telemetry.NatsActivities,
-            subject: $"{Opts.Prefix}.STREAM.DELETE.{stream}",
-            request: null,
-            cancellationToken);
-        return response.Success;
+        using var activity = JSTelemetry.StartJSOperation(Connection, "delete_stream", stream);
+        try
+        {
+            var response = await JSRequestResponseAsync<object, StreamMsgDeleteResponse>(
+                subject: $"{Opts.Prefix}.STREAM.DELETE.{stream}",
+                request: null,
+                cancellationToken);
+            return response.Success;
+        }
+        catch (Exception ex)
+        {
+            Telemetry.SetException(activity, ex);
+            throw;
+        }
     }
 
     /// <summary>
@@ -61,12 +77,20 @@ public partial class NatsJSContext
         StreamPurgeRequest request,
         CancellationToken cancellationToken = default)
     {
-        var response = await JSRequestResponseAsync<StreamPurgeRequest, StreamPurgeResponse>(
-            Telemetry.NatsActivities,
-            subject: $"{Opts.Prefix}.STREAM.PURGE.{stream}",
-            request: request,
-            cancellationToken);
-        return response;
+        using var activity = JSTelemetry.StartJSOperation(Connection, "purge_stream", stream);
+        try
+        {
+            var response = await JSRequestResponseAsync<StreamPurgeRequest, StreamPurgeResponse>(
+                subject: $"{Opts.Prefix}.STREAM.PURGE.{stream}",
+                request: request,
+                cancellationToken);
+            return response;
+        }
+        catch (Exception ex)
+        {
+            Telemetry.SetException(activity, ex);
+            throw;
+        }
     }
 
     /// <summary>
@@ -83,12 +107,20 @@ public partial class NatsJSContext
         StreamMsgDeleteRequest request,
         CancellationToken cancellationToken = default)
     {
-        var response = await JSRequestResponseAsync<StreamMsgDeleteRequest, StreamMsgDeleteResponse>(
-            Telemetry.NatsActivities,
-            subject: $"{Opts.Prefix}.STREAM.MSG.DELETE.{stream}",
-            request: request,
-            cancellationToken);
-        return response;
+        using var activity = JSTelemetry.StartJSOperation(Connection, "delete_message", stream);
+        try
+        {
+            var response = await JSRequestResponseAsync<StreamMsgDeleteRequest, StreamMsgDeleteResponse>(
+                subject: $"{Opts.Prefix}.STREAM.MSG.DELETE.{stream}",
+                request: request,
+                cancellationToken);
+            return response;
+        }
+        catch (Exception ex)
+        {
+            Telemetry.SetException(activity, ex);
+            throw;
+        }
     }
 
     /// <summary>
@@ -105,12 +137,20 @@ public partial class NatsJSContext
         StreamInfoRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        var response = await JSRequestResponseAsync<StreamInfoRequest, StreamInfoResponse>(
-            Telemetry.NatsActivities,
-            subject: $"{Opts.Prefix}.STREAM.INFO.{stream}",
-            request: request,
-            cancellationToken);
-        return new NatsJSStream(this, response);
+        using var activity = JSTelemetry.StartJSOperation(Connection, "get_stream", stream);
+        try
+        {
+            var response = await JSRequestResponseAsync<StreamInfoRequest, StreamInfoResponse>(
+                subject: $"{Opts.Prefix}.STREAM.INFO.{stream}",
+                request: request,
+                cancellationToken);
+            return new NatsJSStream(this, response);
+        }
+        catch (Exception ex)
+        {
+            Telemetry.SetException(activity, ex);
+            throw;
+        }
     }
 
     /// <summary>
@@ -126,12 +166,20 @@ public partial class NatsJSContext
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request.Name, nameof(request.Name));
-        var response = await JSRequestResponseAsync<StreamConfig, StreamUpdateResponse>(
-            Telemetry.NatsActivities,
-            subject: $"{Opts.Prefix}.STREAM.UPDATE.{request.Name}",
-            request: request,
-            cancellationToken);
-        return new NatsJSStream(this, response);
+        using var activity = JSTelemetry.StartJSOperation(Connection, "update_stream", request.Name);
+        try
+        {
+            var response = await JSRequestResponseAsync<StreamConfig, StreamUpdateResponse>(
+                subject: $"{Opts.Prefix}.STREAM.UPDATE.{request.Name}",
+                request: request,
+                cancellationToken);
+            return new NatsJSStream(this, response);
+        }
+        catch (Exception ex)
+        {
+            Telemetry.SetException(activity, ex);
+            throw;
+        }
     }
 
     /// <summary>
@@ -146,18 +194,24 @@ public partial class NatsJSContext
         string? subject = default,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        using var activity = JSTelemetry.StartJSOperation(Connection, "list_streams", stream: null);
+
         var offset = 0;
         while (!cancellationToken.IsCancellationRequested)
         {
-            var response = await JSRequestResponseAsync<StreamListRequest, StreamListResponse>(
-                Telemetry.NatsActivities,
-                subject: $"{Opts.Prefix}.STREAM.LIST",
-                request: new StreamListRequest
-                {
-                    Offset = offset,
-                    Subject = subject,
-                },
-                cancellationToken);
+            StreamListResponse response;
+            try
+            {
+                response = await JSRequestResponseAsync<StreamListRequest, StreamListResponse>(
+                    subject: $"{Opts.Prefix}.STREAM.LIST",
+                    request: new StreamListRequest { Offset = offset, Subject = subject, },
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                Telemetry.SetException(activity, ex);
+                throw;
+            }
 
             if (response.Streams.Count == 0)
                 yield break;
@@ -177,23 +231,27 @@ public partial class NatsJSContext
     /// <returns>Async enumerable list of stream names to be used in a <c>await foreach</c> loop.</returns>
     public async IAsyncEnumerable<string> ListStreamNamesAsync(string? subject = default, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        using var activity = JSTelemetry.StartJSOperation(Connection, "list_stream_names", stream: null);
+
         var offset = 0;
         while (!cancellationToken.IsCancellationRequested)
         {
-            var response = await JSRequestResponseAsync<StreamNamesRequest, StreamNamesResponse>(
-                Telemetry.NatsActivities,
-                subject: $"{Opts.Prefix}.STREAM.NAMES",
-                request: new StreamNamesRequest
-                {
-                    Subject = subject,
-                    Offset = offset,
-                },
-                cancellationToken);
+            StreamNamesResponse response;
+            try
+            {
+                response = await JSRequestResponseAsync<StreamNamesRequest, StreamNamesResponse>(
+                    subject: $"{Opts.Prefix}.STREAM.NAMES",
+                    request: new StreamNamesRequest { Subject = subject, Offset = offset, },
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                Telemetry.SetException(activity, ex);
+                throw;
+            }
 
             if (response.Streams == null || response.Streams.Count == 0)
-            {
                 yield break;
-            }
 
             foreach (var stream in response.Streams)
                 yield return stream;

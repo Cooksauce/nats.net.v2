@@ -22,6 +22,7 @@ internal class NatsJSOrderedConsume<TMsg> : NatsSubBase
     private readonly INatsDeserialize<TMsg> _serializer;
     private readonly Timer _timer;
     private readonly Task _pullTask;
+    private readonly Activity? _activityContext;
 
     private readonly long _maxMsgs;
     private readonly TimeSpan _expires;
@@ -53,6 +54,7 @@ internal class NatsJSOrderedConsume<TMsg> : NatsSubBase
         CancellationToken cancellationToken)
         : base(context.Connection, context.Connection.SubscriptionManager, subject, queueGroup, opts)
     {
+        _activityContext = Activity.Current;
         _cancellationToken = cancellationToken;
         _logger = Connection.Opts.LoggerFactory.CreateLogger<NatsJSConsume<TMsg>>();
         _debug = _logger.IsEnabled(LogLevel.Debug);
@@ -123,7 +125,6 @@ internal class NatsJSOrderedConsume<TMsg> : NatsSubBase
         }
 
         return Connection.PublishAsync(
-            Telemetry.NatsInternalActivities,
             subject: $"{_context.Opts.Prefix}.CONSUMER.MSG.NEXT.{_stream}.{_consumer}",
             data: request,
             replyTo: Subject,
@@ -270,10 +271,27 @@ internal class NatsJSOrderedConsume<TMsg> : NatsSubBase
         }
         else
         {
+            Activity.Current = _activityContext;
+
+            var size = subject.Length
+                       + (replyTo?.Length ?? 0)
+                       + (headersBuffer?.Length ?? 0)
+                       + payloadBuffer.Length;
+
+            var activity = JSTelemetry.JSReceive(
+                connection: Connection,
+                stream: _stream,
+                streamSubject: null, // TODO: how should mappings, external sources, etc be handled?
+                consumerInbox: Subject,
+                queueGroup: QueueGroup,
+                subject: subject,
+                replyTo: replyTo,
+                bodySize: payloadBuffer.Length,
+                size: size);
+
             var msg = new NatsJSMsg<TMsg>(
                 ParseMsg(
-                    Telemetry.NatsActivities,
-                    activityName: "js_receive",
+                    activity,
                     subject: subject,
                     replyTo: replyTo,
                     headersBuffer,

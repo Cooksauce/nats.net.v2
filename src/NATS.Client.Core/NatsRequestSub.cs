@@ -6,11 +6,20 @@ using NATS.Client.Core.Internal;
 
 namespace NATS.Client.Core;
 
-public sealed class NatsSub<T> : NatsSubBase, INatsSub<T>
+/// <summary>
+/// Similar to <see cref="NatsSub{T}"/> but for request/reply pattern.
+/// </summary>
+/// <typeparam name="T"></typeparam>
+/// <remarks>
+/// Replies with no trace headers are associate with an activity passed on construction.
+/// </remarks>
+internal sealed class NatsRequestSub<T> : NatsSubBase, INatsSub<T>
 {
+    private readonly Activity? _activityContext;
     private readonly Channel<NatsMsg<T>> _msgs;
 
-    internal NatsSub(
+    internal NatsRequestSub(
+        Activity? activityContext,
         NatsConnection connection,
         ISubscriptionManager manager,
         string subject,
@@ -20,6 +29,7 @@ public sealed class NatsSub<T> : NatsSubBase, INatsSub<T>
         CancellationToken cancellationToken = default)
         : base(connection, manager, subject, queueGroup, opts, cancellationToken)
     {
+        _activityContext = activityContext;
         _msgs = Channel.CreateBounded<NatsMsg<T>>(
             connection.GetChannelOpts(connection.Opts, opts?.ChannelOpts),
             msg => Connection.OnMessageDropped(this, _msgs?.Reader.Count ?? 0, msg));
@@ -35,6 +45,8 @@ public sealed class NatsSub<T> : NatsSubBase, INatsSub<T>
 
     protected override async ValueTask ReceiveInternalAsync(string subject, string? replyTo, ReadOnlySequence<byte>? headersBuffer, ReadOnlySequence<byte> payloadBuffer)
     {
+        Activity.Current = _activityContext;
+
         var size = subject.Length
                    + (replyTo?.Length ?? 0)
                    + (headersBuffer?.Length ?? 0)
@@ -65,21 +77,4 @@ public sealed class NatsSub<T> : NatsSubBase, INatsSub<T>
     }
 
     protected override void TryComplete() => _msgs.Writer.TryComplete();
-}
-
-public class NatsSubException : NatsException
-{
-    public NatsSubException(string message, ExceptionDispatchInfo exception, Memory<byte> payload, Memory<byte> headers)
-        : base(message)
-    {
-        Exception = exception;
-        Payload = payload;
-        Headers = headers;
-    }
-
-    public ExceptionDispatchInfo Exception { get; }
-
-    public Memory<byte> Payload { get; }
-
-    public Memory<byte> Headers { get; }
 }

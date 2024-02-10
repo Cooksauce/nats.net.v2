@@ -29,7 +29,19 @@ public readonly struct NatsSvcMsg<T>
     /// Activity used to trace the receiving of the this message. It can be used to create child activities under this context.
     /// </summary>
     /// <seealso cref="NatsSvcMsgTelemetryExtensions.StartChildActivity{T}"/>
-    public Activity? Activity => _msg.Activity;
+    public Activity? Activity => _msg.ReceiveActivity;
+
+    public ActivityContext GetActivityContext() => _msg.Headers?.ActivityContext ?? default;
+
+    public bool TryGetActivityContext(out ActivityContext activityContext)
+    {
+        var headers = _msg.Headers;
+        if (headers is null || headers.ActivityContext == default)
+            return false;
+
+        activityContext = headers.ActivityContext;
+        return true;
+    }
 
     /// <summary>
     /// Optional exception if there were any errors.

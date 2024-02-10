@@ -14,7 +14,7 @@ public static class NatsJSMsgTelemetryExtensions
     /// The value will be default if no activity is present.
     /// </returns>
     public static ActivityContext GetActivityContext<T>(this in NatsJSMsg<T> msg)
-        => msg.Activity?.Context ?? default;
+        => msg.ReceiveActivity?.Context ?? default;
 
     /// <summary>Start a child activity under the NatsMsg associated activity.</summary>
     /// <param name="msg">Nats message</param>

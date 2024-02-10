@@ -15,20 +15,7 @@ public partial class NatsConnection
     public string NewInbox() => NewInbox(InboxPrefix);
 
     /// <inheritdoc />
-    public ValueTask<NatsMsg<TReply>> RequestAsync<TRequest, TReply>(
-        string subject,
-        TRequest? data,
-        NatsHeaders? headers = default,
-        INatsSerialize<TRequest>? requestSerializer = default,
-        INatsDeserialize<TReply>? replySerializer = default,
-        NatsPubOpts? requestOpts = default,
-        NatsSubOpts? replyOpts = default,
-        CancellationToken cancellationToken = default)
-        => RequestAsync<TRequest, TReply>(
-            Telemetry.NatsActivities, subject, data, headers, requestSerializer, replySerializer, requestOpts, replyOpts, cancellationToken);
-
-    internal async ValueTask<NatsMsg<TReply>> RequestAsync<TRequest, TReply>(
-        ActivitySource activitySource,
+    public async ValueTask<NatsMsg<TReply>> RequestAsync<TRequest, TReply>(
         string subject,
         TRequest? data,
         NatsHeaders? headers = default,
@@ -39,7 +26,7 @@ public partial class NatsConnection
         CancellationToken cancellationToken = default)
     {
         replyOpts = SetReplyOptsDefaults(replyOpts);
-        await using var sub = await RequestSubAsync<TRequest, TReply>(activitySource, subject, data, headers, requestSerializer, replySerializer, requestOpts, replyOpts, cancellationToken)
+        await using var sub = await RequestSubAsync<TRequest, TReply>(subject, data, headers, requestSerializer, replySerializer, requestOpts, replyOpts, cancellationToken)
             .ConfigureAwait(false);
 
         if (await sub.Msgs.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
@@ -66,7 +53,7 @@ public partial class NatsConnection
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         replyOpts = SetReplyManyOptsDefaults(replyOpts);
-        await using var sub = await RequestSubAsync<TRequest, TReply>(Telemetry.NatsActivities, subject, data, headers, requestSerializer, replySerializer, requestOpts, replyOpts, cancellationToken)
+        await using var sub = await RequestSubAsync<TRequest, TReply>(subject, data, headers, requestSerializer, replySerializer, requestOpts, replyOpts, cancellationToken)
             .ConfigureAwait(false);
 
         while (await sub.Msgs.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
